@@ -1,0 +1,249 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8" />
+    <title>📝 My Notes</title>
+    <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
+
+    <style>
+        body {
+            background-color: #d0f4ff;
+            margin: 0;
+            padding: 20px;
+        }
+
+        .form {
+            max-width: 500px;
+            margin: 30px auto;
+            padding: 25px;
+            background: #fff;
+            border-radius: 12px;
+            box-shadow: 0 8px 25px rgba(0, 0, 0, 0.08);
+            display: flex;
+            flex-direction: column;
+            gap: 15px;
+        }
+
+        .form input,
+        .form textarea {
+            padding: 12px 15px;
+            border: 1px solid #e0e0e0;
+            border-radius: 8px;
+            font-size: 14px;
+            font-family: inherit;
+            transition: all 0.2s;
+        }
+
+        .form input:focus,
+        .form textarea:focus {
+            border-color: #4f46e5;
+            outline: none;
+            box-shadow: 0 0 0 3px rgba(79, 70, 229, 0.15);
+        }
+
+        .form textarea {
+            min-height: 120px;
+            resize: vertical;
+        }
+
+        .form button {
+            padding: 12px;
+            border: none;
+            border-radius: 8px;
+            font-size: 14px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+
+        .btn-primary {
+            background-color: #4f46e5;
+            color: white;
+        }
+
+        .btn-primary:hover {
+            background-color: #4338ca;
+        }
+
+        .btn-cancel {
+            background-color: #f3f4f6;
+            color: #333;
+        }
+
+        .btn-cancel:hover {
+            background-color: #e5e7eb;
+        }
+
+        .notes-list {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 20px;
+        }
+
+        .note-card {
+            margin-top: 1%;
+            display: flex;
+            flex-direction: column;
+            background-color: #73ecff;
+            padding: 15px;
+            border-radius: 8px;
+            width: 200px;
+            font-family: Arial, sans-serif;
+        }
+
+        .actions {
+            display: flex;
+            justify-content: space-around;
+            padding: 0 4%;
+        }
+
+        .actions button {
+            background: none;
+            border: none;
+            cursor: pointer;
+            font-size: 1rem;
+            padding: 4px 6px;
+            border-radius: 6px;
+            transition: background 0.15s;
+        }
+
+        .actions button:hover {
+            background: rgba(0, 0, 0, 0.08);
+        }
+
+        .note-title {
+            word-wrap: break-word;
+            width: 100%;
+            background-color: aliceblue;
+            border-radius: 8px;
+        }
+
+        .note-title h3 {
+            margin-left: 4px;
+        }
+
+        .note-body {
+            word-wrap: break-word;
+            margin: 8% 0;
+            width: 100%;
+            padding: 1px;
+            background-color: aliceblue;
+            border-radius: 8px;
+        }
+
+        .note-body p {
+            margin-left: 4px;
+            padding: 5px;
+        }
+    </style>
+</head>
+
+<body>
+    <!-- x-data points to the function below | x-init replaces onMounted -->
+    <div id="app" x-data="notesApp()" x-init="init()">
+
+        <div class="form">
+            <h1>📝 My Notes</h1>
+            <!-- v-model → x-model -->
+            <input x-model="title" placeholder="Note title..." />
+            <textarea x-model="body" placeholder="Write your note...">
+            </textarea>
+            <!-- {{ ternary }} → x-text with same ternary -->
+            <button class="btn-primary" @click="saveNote()" x-text="editingId ? 'Update Note' : 'Add Note'">
+            </button>
+            <!-- v-if → x-show -->
+            <button class="btn-cancel" x-show="editingId" @click="cancelEdit()">Cancel</button>
+        </div>
+
+        <div class="notes-list">
+            <!-- v-for on a div → x-for MUST be on a <template> tag -->
+            <template x-for="note in notes" :key="note.id">
+                <div class="note-card">
+                    <div class="note-title">
+                        <!-- {{ note.title }} → x-text="note.title" -->
+                        <h3 x-text="note.title"></h3>
+                    </div>
+                    <div class="note-body">
+                        <p x-text="note.body"></p>
+                    </div>
+                    <div class="actions">
+                        <button @click="startEdit(note)">✏️ Edit</button>
+                        <button @click="deleteNote(note.id)">🗑️ Delete</button>
+                    </div>
+                </div>
+            </template>
+        </div>
+
+    </div>
+
+    <script>
+        // ── Replaces firebase.js ──────────────────────────────────────
+        const firebaseConfig = {
+            apiKey: "AIzaSyAEzCDsVkVeBNcfBkWpg_ZbcBdOW9xOVXA",
+            authDomain: "todo-c6dc3.firebaseapp.com",
+            projectId: "todo-c6dc3",
+            storageBucket: "todo-c6dc3.firebasestorage.app",
+            messagingSenderId: "526399164880",
+            appId: "1:526399164880:web:e3eba440d5a41dce4f29d5",
+            measurementId: "G-NSHP6MJTN4"
+        };
+        firebase.initializeApp(firebaseConfig);
+        const db = firebase.firestore(); // replaces `import { db } from './firebase'`
+
+        // ── Replaces <script setup> ───────────────────────────────────
+        function notesApp() {
+            return {
+                // ref('') → plain properties, no .value anywhere
+                title: '',
+                body: '',
+                notes: [],
+                editingId: null,
+
+                // onMounted(loadNotes) → init() called automatically by x-init
+                async init() { await this.loadNotes(); },
+
+                // getDocs(collection) → db.collection().get()
+                async loadNotes() {
+                    const snapshot = await db.collection('notes').get();
+                    this.notes = snapshot.docs.map(d => ({ id: d.id, ...d.data() }));
+                },
+
+                async saveNote() {
+                    if (!this.title || !this.body) return;
+                    if (this.editingId) {
+                        // updateDoc(ref, data) → .doc(id).update(data)
+                        await db.collection('notes').doc(this.editingId).update({ title: this.title, body: this.body });
+                        const i = this.notes.findIndex(n => n.id === this.editingId);
+                        this.notes[i].title = this.title;
+                        this.notes[i].body = this.body;
+                        this.editingId = null;
+                    } else {
+                        // addDoc(collection, data) → .collection().add(data)
+                        const ref = await db.collection('notes').add({
+                            title: this.title, body: this.body,
+                            // serverTimestamp() → firebase.firestore.FieldValue.serverTimestamp()
+                            createdAt: firebase.firestore.FieldValue.serverTimestamp()
+                        });
+                        this.notes.push({ id: ref.id, title: this.title, body: this.body });
+                    }
+                    this.title = ''; this.body = '';
+                },
+
+                // These are identical to Vue — just add this.
+                startEdit(note) { this.editingId = note.id; this.title = note.title; this.body = note.body; },
+                cancelEdit() { this.editingId = null; this.title = ''; this.body = ''; },
+
+                // deleteDoc(ref) → .doc(id).delete()
+                async deleteNote(id) {
+                    await db.collection('notes').doc(id).delete();
+                    this.notes = this.notes.filter(n => n.id !== id);
+                }
+            }
+        }
+    </script>
+</body>
+
+</html>
